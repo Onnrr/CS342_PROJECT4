@@ -3,10 +3,60 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define PAGE_SIZE 4096
 
 void pte(int pid, int VA);
+
+void printBinary(unsigned long num) {
+    if (num == 0) {
+        printf("0");
+        return;
+    }
+
+    int bits = sizeof(num) * 8;
+    int i;
+
+    for (i = bits - 1; i >= 0; i--) {
+        unsigned long mask = 1UL << i;
+        printf("%d", (num & mask) ? 1 : 0);
+    }
+    printf("\n");
+}
+
+void pompa() {
+  int pagemap = open("/proc/2557/pagemap", O_RDONLY);
+
+  char va[] = "7fb976000000";
+
+  unsigned long vadress = strtoul(va, NULL, 16);
+
+  unsigned long offset = vadress / 4096 * sizeof(unsigned long);
+
+  lseek(pagemap, offset, SEEK_SET);
+
+  unsigned long entry;
+  read(pagemap, &entry, sizeof(unsigned long));
+
+  printf("entry: ");
+  printBinary(entry);
+  
+  unsigned long frame_number = entry & ((1UL << 55) - 1);
+  printf("frame: ");
+  printBinary(frame_number);
+
+  unsigned long offset2 = frame_number * sizeof(unsigned long);
+  int kpagecount = open("/proc/kpagecount", O_RDONLY);
+  lseek(kpagecount, offset2, SEEK_SET);
+
+  unsigned long count;
+  read(kpagecount, &count, sizeof(unsigned long));
+
+  printf("count: %lu\n", count);
+
+   
+}
 
 int main(int argc, char *argv[]) {
     if (argc <= 1) {
