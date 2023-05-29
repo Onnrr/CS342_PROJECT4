@@ -7,7 +7,7 @@
 
 #define PAGE_SIZE 4096
 
-void pte(int pid, int VA);
+void pte(int pid, unsigned long VA);
 
 void printBinary(unsigned long num) {
     if (num == 0) {
@@ -198,8 +198,8 @@ int main(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i],"-pte") == 0) {
             int pid = atoi(argv[i + 1]);
-            int VA = atoi(argv[i + 2]);
-            pte(0, 0);
+            unsigned long VA = strtol(argv[i + 2], NULL, 16);
+            pte(pid, VA);
         }
         else if (strcmp(argv[i],"-maprange") == 0) {
             int pid = atoi(argv[i + 1]);
@@ -225,26 +225,47 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void pte(int pid, int VA) {
-    pid = 2557;//getpid();
+void pte(int pid, unsigned long VA) {
     char path[256];
     snprintf(path, sizeof(path), "/proc/%d/pagemap", pid);
 
     int pagemap = open(path, O_RDONLY);
+    if (pagemap == -1) {
+        printf("Failed to open pagemap %s", path);
+        return;
+    }
 
     unsigned long page_table_entry;
 
-    char va[] = "7fb976000000";
-    unsigned long vadress = strtoul(va, NULL, 16);
-    unsigned long offset = vadress / 4096 * sizeof(unsigned long);
+    unsigned long offset = ((VA >> 12) & 0xFFFFFFFFF) * sizeof(unsigned long);
 
     lseek(pagemap, offset, SEEK_SET);
+    
     // Read the page table entry
-    if (read(pagemap, &page_table_entry, sizeof(unsigned long)) == -1) {
-        printf("Failed to read pagemap");
+    ssize_t bytesRead = read(pagemap, &page_table_entry, sizeof(unsigned long));
+    if (bytesRead == -1) {
+        perror("Failed to read pagemap");
+        close(pagemap);
+        return;
     }
 
     printf("Entry: ");
     printBinary(page_table_entry);
 
+    int present = (page_table_entry >> 63) & 1;
+    int swapped = (page_table_entry >> 62) & 1;
+    int shared = (page_table_entry >> 61) & 1;
+    int exclusively_mapped = (page_table_entry >> 56) & 1;
+    int soft_dirty = (page_table_entry >> 55) & 1;
+    unsigned long pfn = (page_table_entry >> 9) & 0x007FFFFFFFFFFFFF;
+
+    printf("Detailed information for the page\n");
+    printf("Physical page number: %lx\n", pfn);
+    printf("Page present: %d\n", present);
+    printf("Page swapped: %d\n", swapped);
+    printf("File page or shared-anon: %d\n", shared);
+    printf("Page exclusively mapped: %d\n", exclusively_mapped);
+    printf("Pte is soft-dirty: %d\n", soft_dirty);
+
+    close(pagemap);
 }
