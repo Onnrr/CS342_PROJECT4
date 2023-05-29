@@ -268,45 +268,25 @@ int main(int argc, char *argv[]) {
 }
 
 void pte(int pid, int VA) {
-    pid = getpid();
+    pid = 2557;//getpid();
     char path[256];
     snprintf(path, sizeof(path), "/proc/%d/pagemap", pid);
 
-    FILE* pagemap_file = fopen(path, "rb");
-    if (pagemap_file == NULL) {
-        perror("Failed to open pagemap");
-        return;
+    int pagemap = open(path, O_RDONLY);
+
+    unsigned long page_table_entry;
+
+    char va[] = "7fb976000000";
+    unsigned long vadress = strtoul(va, NULL, 16);
+    unsigned long offset = vadress / 4096 * sizeof(unsigned long);
+
+    lseek(pagemap, offset, SEEK_SET);
+    // Read the page table entry
+    if (read(pagemap, &page_table_entry, sizeof(unsigned long)) == -1) {
+        printf("Failed to read pagemap");
     }
 
-    uint64_t page_table_entry;
-    unsigned long long virtual_addr = 0;
-    unsigned long long num_entries = 10;  // Number of entries to read
+    printf("Entry: ");
+    printBinary(page_table_entry);
 
-    for (unsigned long long i = 0; i < num_entries; i++) {
-        // Calculate the offset based on the virtual address
-        unsigned long long offset = (virtual_addr / PAGE_SIZE) * sizeof(uint64_t);
-
-        // Seek to the offset in the file
-        if (fseek(pagemap_file, offset, SEEK_SET) != 0) {
-            perror("Failed to seek pagemap");
-            fclose(pagemap_file);
-        }
-
-        // Read the page table entry
-        if (fread(&page_table_entry, sizeof(uint64_t), 1, pagemap_file) != 1) {
-            perror("Failed to read pagemap");
-            fclose(pagemap_file);
-        }
-
-        // Extract the physical page number from the page table entry
-        uint64_t physical_page_num = page_table_entry & ((1ULL << 55) - 1);
-        uint64_t physical_addr = physical_page_num * PAGE_SIZE;
-
-        printf("Virtual Address: 0x%llx, Physical Address: 0x%llx\n", virtual_addr, physical_addr);
-
-        // Increment the virtual address
-        virtual_addr += PAGE_SIZE;
-    }
-
-    fclose(pagemap_file);
 }
