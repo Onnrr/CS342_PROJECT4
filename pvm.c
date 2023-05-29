@@ -8,6 +8,7 @@
 #define PAGE_SIZE 4096
 
 void pte(int pid, unsigned long VA);
+void print_mapping(int pid, unsigned long va1, unsigned long va2);
 
 void printBinary(unsigned long num) {
     if (num == 0) {
@@ -23,18 +24,6 @@ void printBinary(unsigned long num) {
         printf("%d", (num & mask) ? 1 : 0);
     }
     printf("\n");
-}
-
-void print_mapping(int page_number, int frame_number) {
-    if (frame_number == -1) {
-        printf("unused\n");
-    } 
-    else if (frame_number == -2) {
-        printf("not-in-memory\n");
-    } 
-    else {
-        printf("(%d, %d)\n", page_number, frame_number);
-    }
 }
 
 void memused(int pid) {
@@ -252,12 +241,9 @@ int main(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i],"-maprange") == 0) {
             int pid = atoi(argv[i + 1]);
-            int va1 = atoi(argv[i + 2]);
-            int va2 = atoi(argv[i + 3]);
-            for(int i = va1; i < va2; i++){
-                int frame_number = get_frame_number(pid, i); // get frame number çalışmıyor olabilir internetten baktım test etcem bi oy atıp geleyim
-                print_mapping(i, frame_number);
-            }
+            unsigned long va1 = atoi(argv[i + 2]);
+            unsigned long va2 = atoi(argv[i + 3]);
+            print_mapping(pid, va1, va2);
         }
         else if (strcmp(argv[i],"-mapall") == 0) {
             int pid = atoi(argv[i + 1]);
@@ -317,4 +303,72 @@ void pte(int pid, unsigned long VA) {
     printf("Pte is soft-dirty: %d\n", soft_dirty);
 
     close(pagemap);
+}
+
+void print_mapping(int pid, unsigned long va1, unsigned long va2){
+    FILE* filePtr;
+
+    char filePath[256];
+    char line[256];
+
+    sprintf(filePath, "/proc/%d/maps", pid);
+
+    filePtr = fopen(filePath, "r");
+    if(!filePtr){
+        printf("Cannot open the file \n");
+        return;
+    }
+
+    int counter = 0;
+    unsigned long empty, start, end;
+    while(fgets(line, sizeof(line), filePtr)){
+        if(sscanf(line, "%lx-%lx %*s %lx %*s %*s", &start, &end, &empty) == 3){
+            if(start >= va1){
+                for(unsigned long i = start; start < va2; i = i + PAGE_SIZE){
+                    unsigned long page_no = i / PAGE_SIZE;
+                    printf("page no: %lu\n,", page_no);
+                    counter++;
+
+                    char filePath[256];
+                    sprintf(filePath, "/proc/%d/pagemap", pid);
+                    
+                    int pageMap = open(filePath, O_RDONLY);
+
+                    if(pageMap == -1){
+                        printf("file cannot be opened\n");
+                        return;
+                    }
+
+                    unsigned long offset = ((i >> 12) & 0xFFFFFFFFF) * 8;
+
+                    lseek(pageMap, offset, SEEK_SET);
+
+                    unsigned long entry;
+                    read(pageMap, &entry, sizeof(unsigned long ));
+
+                    unsigned long present = (entry >> 63) & 1;
+                    unsigned long swapped = (entry >> 62) & 1;
+
+                    if(present == 1){
+                        if (swapped == 1){
+                            unsigned long swapOffset = (entry >> 5) & 0x3FFFFFFFFFFFF;
+                            unsigned long swapType = (entry) & 0x1F;
+                            printf("swap offset is: %lx ", swapOffset);
+                            printf("swap type is: %lx\n", swapType);
+                        }
+                        else{
+                            unsigned long pfn = (entry) & 0x7FFFFFFFFFFFFF;
+                            printf("pfn is: %lx\n", pfn);
+                        }
+                    } 
+                    else{
+                        printf("not in memory\n");
+                    }
+                }
+            }
+        }
+    }
+
+    if(!counter)
+        printf("unused\n");
 }
