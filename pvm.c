@@ -284,9 +284,7 @@ void pte(int pid, unsigned long VA) {
         return;
     }
 
-    for (unsigned long long i = 0; i < num_entries; i++) {
-        // Calculate the offset based on the virtual address
-        unsigned long long offset = (virtual_addr / PAGE_SIZE) * sizeof(uint64_t);
+    unsigned long page_table_entry;
 
     unsigned long offset = ((VA >> 12) & 0xFFFFFFFFF) * sizeof(unsigned long);
 
