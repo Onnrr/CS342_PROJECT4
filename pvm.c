@@ -25,8 +25,50 @@ void printBinary(unsigned long num) {
     printf("\n");
 }
 
-void frameinfo(int pfn) {
+void frameinfo(unsigned long pfn) {
+  int kpageflags = open("/proc/kpageflags", O_RDONLY);
+  int kpagecount = open("/proc/kpagecount", O_RDONLY);
 
+  unsigned long offset = pfn * sizeof(unsigned long);
+
+  lseek(kpageflags, offset, SEEK_SET);
+  unsigned long entry;
+  read(kpageflags, &entry, sizeof(unsigned long));
+  
+  lseek(kpagecount, offset, SEEK_SET);
+  unsigned long count;
+  read(kpagecount, &count, sizeof(unsigned long));
+
+  printf("Reference Count: %lu\n", count);
+
+  printf("FLAGS\n");
+  printBinary(entry);
+  printf(" 0. LOCKED:           %d\n", (entry & 0x1) ? 1 : 0);
+  printf(" 1. ERROR:            %d\n", (entry & 0x2) ? 1 : 0);
+  printf(" 2. REFERENCED:       %d\n", (entry & 0x4) ? 1 : 0);
+  printf(" 3. UPTODATE:         %d\n", (entry & 0x8) ? 1 : 0);
+  printf(" 4. DIRTY:            %d\n", (entry & 0x10) ? 1 : 0);
+  printf(" 5. LRU:              %d\n", (entry & 0x20) ? 1 : 0);
+  printf(" 6. ACTIVE:           %d\n", (entry & 0x40) ? 1 : 0);
+  printf(" 7. SLAB:             %d\n", (entry & 0x80) ? 1 : 0);
+  printf(" 8. WRITEBACK:        %d\n", (entry & 0x100) ? 1 : 0);
+  printf(" 9. RECLAIM:          %d\n", (entry & 0x200) ? 1 : 0);
+  printf("10. BUDDY:            %d\n", (entry & 0x400) ? 1 : 0);
+  printf("11. MMAP:             %d\n", (entry & 0x800) ? 1 : 0);
+  printf("12. ANON:             %d\n", (entry & 0x1000) ? 1 : 0);
+  printf("13. SWAPCACHE:        %d\n", (entry & 0x2000) ? 1 : 0);
+  printf("14. SWAPBACKED:       %d\n", (entry & 0x4000) ? 1 : 0);
+  printf("15. COMPOUND_HEAD:    %d\n", (entry & 0x8000) ? 1 : 0);
+  printf("16. COMPOUND_TAIL:    %d\n", (entry & 0x10000) ? 1 : 0);
+  printf("17. HUGE:             %d\n", (entry & 0x20000) ? 1 : 0);
+  printf("18. UNEVICTABLE:      %d\n", (entry & 0x40000) ? 1 : 0);
+  printf("19. HWPOISON:         %d\n", (entry & 0x80000) ? 1 : 0);
+  printf("20. NOPAGE:           %d\n", (entry & 0x100000) ? 1 : 0);
+  printf("21. KSM:              %d\n", (entry & 0x200000) ? 1 : 0);
+  printf("22. THP:              %d\n", (entry & 0x400000) ? 1 : 0);
+  printf("23. BALLOON:          %d\n", (entry & 0x800000) ? 1 : 0);
+  printf("24. ZERO_PAGE:        %d\n", (entry & 0x1000000) ? 1 : 0);
+  printf("25. IDLE:             %d\n", (entry & 0x2000000) ? 1 : 0); 
 }
 
 void print_mapping(int page_number, int frame_number) {
