@@ -25,6 +25,10 @@ void printBinary(unsigned long num) {
     printf("\n");
 }
 
+void frameinfo(int pfn) {
+
+}
+
 void print_mapping(int page_number, int frame_number) {
     if (frame_number == -1) {
         printf("unused\n");
@@ -37,37 +41,77 @@ void print_mapping(int page_number, int frame_number) {
     }
 }
 
-void pompa() {
-  int pagemap = open("/proc/2557/pagemap", O_RDONLY);
+void memused(int pid) {
+    FILE *file;
+    char line[512];
 
-  char va[] = "7fb976000000";
+    // Open the file for reading
+    char filepath[256];
+    sprintf(filepath,"/proc/%d/maps", pid);
+    file = fopen(filepath, "r");
 
-  unsigned long vadress = strtoul(va, NULL, 16);
+    unsigned long totalVM = 0, totalPM = 0, exclusivePM = 0;
 
-  unsigned long offset = vadress / 4096 * sizeof(unsigned long);
+    // Read the file line by line until EOF is reached
+    while (fgets(line, sizeof(line), file) != NULL) {
+        // Process the line here
+        char *token;
+        char *firstPart;
+        char *secondPart;
 
-  lseek(pagemap, offset, SEEK_SET);
+        token = strtok(line, "-");
+        if (token != NULL) {
+            firstPart = malloc(strlen(token) + 1);  // Allocate memory for the first part
+            strcpy(firstPart, token);               // Copy the first part into the variable
+        }
 
-  unsigned long entry;
-  read(pagemap, &entry, sizeof(unsigned long));
+        token = strtok(NULL, " ");
+        if (token != NULL) {
+            secondPart = malloc(strlen(token) + 1); // Allocate memory for the second part
+            strcpy(secondPart, token);              // Copy the second part into the variable
+        }
 
-  printf("entry: ");
-  printBinary(entry);
-  
-  unsigned long frame_number = entry & ((1UL << 55) - 1);
-  printf("frame: ");
-  printBinary(frame_number);
+        unsigned long startAddr = strtoul(firstPart, NULL, 16);
+        unsigned long endAddr = strtoul(secondPart, NULL, 16);
 
-  unsigned long offset2 = frame_number * sizeof(unsigned long);
-  int kpagecount = open("/proc/kpagecount", O_RDONLY);
-  lseek(kpagecount, offset2, SEEK_SET);
+        totalVM += (endAddr - startAddr + 1) / 1024;
 
-  unsigned long count;
-  read(kpagecount, &count, sizeof(unsigned long));
+        char pagemap_path[256];
+        sprintf(pagemap_path, "/proc/%d/pagemap", pid);
 
-  printf("count: %lu\n", count);
+        int pagemap = open(pagemap_path, O_RDONLY);
 
-   
+        for (unsigned long i = startAddr; i < endAddr; i += 4096) {
+          // find the frame number
+          unsigned long offset = i / 4096 * sizeof(unsigned long);
+          lseek(pagemap, offset, SEEK_SET);
+          unsigned long entry;
+          read(pagemap, &entry, sizeof(unsigned long));
+
+          unsigned long valid = (entry >> 63) & 1;
+          if (valid) {
+            unsigned long frame_number = entry & ((1UL << 55) - 1);
+
+            // find the times frame is referenced
+            unsigned long offset2 = frame_number * sizeof(unsigned long);
+            int kpagecount = open("/proc/kpagecount", O_RDONLY);
+            lseek(kpagecount, offset2, SEEK_SET);
+
+            unsigned long count;
+            read(kpagecount, &count, sizeof(unsigned long));
+
+            if (count == 1) exclusivePM += 4;
+            if (count >= 1) totalPM += 4;
+          }
+        }
+
+    }
+    printf("totalVM: %lu KB\n", totalVM);
+    printf("totalPM: %lu KB\n", totalPM);
+    printf("exclusivePM: %lu KB\n", exclusivePM);
+
+    // Close the file
+    fclose(file);
 }
 
 int get_frame_number(int pid, int page_number) {
@@ -145,7 +189,8 @@ int main(int argc, char *argv[]) {
 
         }
         else if (strcmp(argv[i],"-memused") == 0) {
-            
+            int pid = atoi(argv[i + 1]);
+            memused(pid);
         }
         else if (strcmp(argv[i],"-mapva") == 0) {
             int pid = atoi(argv[i + 1]);
