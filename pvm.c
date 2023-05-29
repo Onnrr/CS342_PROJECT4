@@ -25,52 +25,6 @@ void printBinary(unsigned long num) {
     printf("\n");
 }
 
-void frameinfo(unsigned long pfn) {
-  int kpageflags = open("/proc/kpageflags", O_RDONLY);
-  int kpagecount = open("/proc/kpagecount", O_RDONLY);
-
-  unsigned long offset = pfn * sizeof(unsigned long);
-
-  lseek(kpageflags, offset, SEEK_SET);
-  unsigned long entry;
-  read(kpageflags, &entry, sizeof(unsigned long));
-  
-  lseek(kpagecount, offset, SEEK_SET);
-  unsigned long count;
-  read(kpagecount, &count, sizeof(unsigned long));
-
-  printf("Reference Count: %lu\n", count);
-
-  printf("FLAGS\n");
-  printBinary(entry);
-  printf(" 0. LOCKED:           %d\n", (entry & 0x1) ? 1 : 0);
-  printf(" 1. ERROR:            %d\n", (entry & 0x2) ? 1 : 0);
-  printf(" 2. REFERENCED:       %d\n", (entry & 0x4) ? 1 : 0);
-  printf(" 3. UPTODATE:         %d\n", (entry & 0x8) ? 1 : 0);
-  printf(" 4. DIRTY:            %d\n", (entry & 0x10) ? 1 : 0);
-  printf(" 5. LRU:              %d\n", (entry & 0x20) ? 1 : 0);
-  printf(" 6. ACTIVE:           %d\n", (entry & 0x40) ? 1 : 0);
-  printf(" 7. SLAB:             %d\n", (entry & 0x80) ? 1 : 0);
-  printf(" 8. WRITEBACK:        %d\n", (entry & 0x100) ? 1 : 0);
-  printf(" 9. RECLAIM:          %d\n", (entry & 0x200) ? 1 : 0);
-  printf("10. BUDDY:            %d\n", (entry & 0x400) ? 1 : 0);
-  printf("11. MMAP:             %d\n", (entry & 0x800) ? 1 : 0);
-  printf("12. ANON:             %d\n", (entry & 0x1000) ? 1 : 0);
-  printf("13. SWAPCACHE:        %d\n", (entry & 0x2000) ? 1 : 0);
-  printf("14. SWAPBACKED:       %d\n", (entry & 0x4000) ? 1 : 0);
-  printf("15. COMPOUND_HEAD:    %d\n", (entry & 0x8000) ? 1 : 0);
-  printf("16. COMPOUND_TAIL:    %d\n", (entry & 0x10000) ? 1 : 0);
-  printf("17. HUGE:             %d\n", (entry & 0x20000) ? 1 : 0);
-  printf("18. UNEVICTABLE:      %d\n", (entry & 0x40000) ? 1 : 0);
-  printf("19. HWPOISON:         %d\n", (entry & 0x80000) ? 1 : 0);
-  printf("20. NOPAGE:           %d\n", (entry & 0x100000) ? 1 : 0);
-  printf("21. KSM:              %d\n", (entry & 0x200000) ? 1 : 0);
-  printf("22. THP:              %d\n", (entry & 0x400000) ? 1 : 0);
-  printf("23. BALLOON:          %d\n", (entry & 0x800000) ? 1 : 0);
-  printf("24. ZERO_PAGE:        %d\n", (entry & 0x1000000) ? 1 : 0);
-  printf("25. IDLE:             %d\n", (entry & 0x2000000) ? 1 : 0); 
-}
-
 void print_mapping(int page_number, int frame_number) {
     if (frame_number == -1) {
         printf("unused\n");
@@ -84,7 +38,7 @@ void print_mapping(int page_number, int frame_number) {
 }
 
 void memused(int pid) {
-    FILE *file;
+   FILE *file;
     char line[512];
 
     // Open the file for reading
@@ -93,6 +47,8 @@ void memused(int pid) {
     file = fopen(filepath, "r");
 
     unsigned long totalVM = 0, totalPM = 0, exclusivePM = 0;
+
+    int go = 1;
 
     // Read the file line by line until EOF is reached
     while (fgets(line, sizeof(line), file) != NULL) {
@@ -116,8 +72,6 @@ void memused(int pid) {
         unsigned long startAddr = strtoul(firstPart, NULL, 16);
         unsigned long endAddr = strtoul(secondPart, NULL, 16);
 
-        totalVM += (endAddr - startAddr + 1) / 1024;
-
         char pagemap_path[256];
         sprintf(pagemap_path, "/proc/%d/pagemap", pid);
 
@@ -129,11 +83,13 @@ void memused(int pid) {
           lseek(pagemap, offset, SEEK_SET);
           unsigned long entry;
           read(pagemap, &entry, sizeof(unsigned long));
-
           unsigned long valid = (entry >> 63) & 1;
           if (valid) {
             unsigned long frame_number = entry & ((1UL << 55) - 1);
-
+            //if (go) {
+                //frameinfo(frame_number);
+                //go = 0;
+            //}
             // find the times frame is referenced
             unsigned long offset2 = frame_number * sizeof(unsigned long);
             int kpagecount = open("/proc/kpagecount", O_RDONLY);
@@ -142,11 +98,15 @@ void memused(int pid) {
             unsigned long count;
             read(kpagecount, &count, sizeof(unsigned long));
 
-            if (count == 1) exclusivePM += 4;
-            if (count >= 1) totalPM += 4;
+            if (count == 1) {
+                exclusivePM += 4;
+            }
+            if (count >= 1) {
+              totalPM += 4;
+            }
           }
+          totalVM += 4;
         }
-
     }
     printf("totalVM: %lu KB\n", totalVM);
     printf("totalPM: %lu KB\n", totalPM);
@@ -220,6 +180,52 @@ int get_frame_number(int pid, int page_number) {
     return -2;
 }
 
+void frameinfo(unsigned long pfn) {
+  int kpageflags = open("/proc/kpageflags", O_RDONLY);
+  int kpagecount = open("/proc/kpagecount", O_RDONLY);
+
+  unsigned long offset = pfn * sizeof(unsigned long);
+
+  lseek(kpageflags, offset, SEEK_SET);
+  unsigned long entry;
+  read(kpageflags, &entry, sizeof(unsigned long));
+  
+  lseek(kpagecount, offset, SEEK_SET);
+  unsigned long count;
+  read(kpagecount, &count, sizeof(unsigned long));
+
+  printf("Reference Count: %lu\n", count);
+
+  printf("FLAGS\n");
+  printf(" 0. LOCKED:           %d\n", (entry & 0x1) ? 1 : 0);
+  printf(" 1. ERROR:            %d\n", (entry & 0x2) ? 1 : 0);
+  printf(" 2. REFERENCED:       %d\n", (entry & 0x4) ? 1 : 0);
+  printf(" 3. UPTODATE:         %d\n", (entry & 0x8) ? 1 : 0);
+  printf(" 4. DIRTY:            %d\n", (entry & 0x10) ? 1 : 0);
+  printf(" 5. LRU:              %d\n", (entry & 0x20) ? 1 : 0);
+  printf(" 6. ACTIVE:           %d\n", (entry & 0x40) ? 1 : 0);
+  printf(" 7. SLAB:             %d\n", (entry & 0x80) ? 1 : 0);
+  printf(" 8. WRITEBACK:        %d\n", (entry & 0x100) ? 1 : 0);
+  printf(" 9. RECLAIM:          %d\n", (entry & 0x200) ? 1 : 0);
+  printf("10. BUDDY:            %d\n", (entry & 0x400) ? 1 : 0);
+  printf("11. MMAP:             %d\n", (entry & 0x800) ? 1 : 0);
+  printf("12. ANON:             %d\n", (entry & 0x1000) ? 1 : 0);
+  printf("13. SWAPCACHE:        %d\n", (entry & 0x2000) ? 1 : 0);
+  printf("14. SWAPBACKED:       %d\n", (entry & 0x4000) ? 1 : 0);
+  printf("15. COMPOUND_HEAD:    %d\n", (entry & 0x8000) ? 1 : 0);
+  printf("16. COMPOUND_TAIL:    %d\n", (entry & 0x10000) ? 1 : 0);
+  printf("17. HUGE:             %d\n", (entry & 0x20000) ? 1 : 0);
+  printf("18. UNEVICTABLE:      %d\n", (entry & 0x40000) ? 1 : 0);
+  printf("19. HWPOISON:         %d\n", (entry & 0x80000) ? 1 : 0);
+  printf("20. NOPAGE:           %d\n", (entry & 0x100000) ? 1 : 0);
+  printf("21. KSM:              %d\n", (entry & 0x200000) ? 1 : 0);
+  printf("22. THP:              %d\n", (entry & 0x400000) ? 1 : 0);
+  printf("23. BALLOON:          %d\n", (entry & 0x800000) ? 1 : 0);
+  printf("24. ZERO_PAGE:        %d\n", (entry & 0x1000000) ? 1 : 0);
+  printf("25. IDLE:             %d\n", (entry & 0x2000000) ? 1 : 0);
+  
+}
+
 int main(int argc, char *argv[]) {
     if (argc <= 1) {
         printf("No arguments provided.\n");
@@ -228,7 +234,8 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i],"-frameinfo") == 0) {
-
+            int pfn = atoi(argv[i + 1]);
+            frameinfo(pfn);
         }
         else if (strcmp(argv[i],"-memused") == 0) {
             int pid = atoi(argv[i + 1]);
@@ -268,25 +275,45 @@ int main(int argc, char *argv[]) {
 }
 
 void pte(int pid, int VA) {
-    pid = 2557;//getpid();
+    pid = getpid();
     char path[256];
     snprintf(path, sizeof(path), "/proc/%d/pagemap", pid);
 
-    int pagemap = open(path, O_RDONLY);
-
-    unsigned long page_table_entry;
-
-    char va[] = "7fb976000000";
-    unsigned long vadress = strtoul(va, NULL, 16);
-    unsigned long offset = vadress / 4096 * sizeof(unsigned long);
-
-    lseek(pagemap, offset, SEEK_SET);
-    // Read the page table entry
-    if (read(pagemap, &page_table_entry, sizeof(unsigned long)) == -1) {
-        printf("Failed to read pagemap");
+    FILE* pagemap_file = fopen(path, "rb");
+    if (pagemap_file == NULL) {
+        perror("Failed to open pagemap");
+        return;
     }
 
-    printf("Entry: ");
-    printBinary(page_table_entry);
+    uint64_t page_table_entry;
+    unsigned long long virtual_addr = 0;
+    unsigned long long num_entries = 10;  // Number of entries to read
 
+    for (unsigned long long i = 0; i < num_entries; i++) {
+        // Calculate the offset based on the virtual address
+        unsigned long long offset = (virtual_addr / PAGE_SIZE) * sizeof(uint64_t);
+
+        // Seek to the offset in the file
+        if (fseek(pagemap_file, offset, SEEK_SET) != 0) {
+            perror("Failed to seek pagemap");
+            fclose(pagemap_file);
+        }
+
+        // Read the page table entry
+        if (fread(&page_table_entry, sizeof(uint64_t), 1, pagemap_file) != 1) {
+            perror("Failed to read pagemap");
+            fclose(pagemap_file);
+        }
+
+        // Extract the physical page number from the page table entry
+        uint64_t physical_page_num = page_table_entry & ((1ULL << 55) - 1);
+        uint64_t physical_addr = physical_page_num * PAGE_SIZE;
+
+        printf("Virtual Address: 0x%llx, Physical Address: 0x%llx\n", virtual_addr, physical_addr);
+
+        // Increment the virtual address
+        virtual_addr += PAGE_SIZE;
+    }
+
+    fclose(pagemap_file);
 }
