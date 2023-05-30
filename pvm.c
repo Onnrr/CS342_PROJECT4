@@ -9,6 +9,7 @@
 
 void pte(int pid, unsigned long VA);
 void print_mapping(int pid, unsigned long va1, unsigned long va2);
+void mapAll(int pid);
 
 void printBinary(unsigned long num) {
     if (num == 0) {
@@ -247,7 +248,7 @@ int main(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i],"-mapall") == 0) {
             int pid = atoi(argv[i + 1]);
-
+            mapAll(pid);
         }
         else if (strcmp(argv[i],"-mapallin") == 0) {
             
@@ -371,4 +372,71 @@ void print_mapping(int pid, unsigned long va1, unsigned long va2){
 
     if(!counter)
         printf("unused\n");
+}
+
+void print_memory_mapping(uint64_t page_number, uint64_t frame_number){
+    if (frame_number != 0)
+        printf("Page %llu: Frame %llu\n", page_number, frame_number);
+    else
+        printf("Page %llu: not-in-memory\n", page_number);
+}
+
+void mapAll(int pid){
+    FILE* filePtr;
+    FILE* filePtr2;
+
+    char mapsall_path[256];
+    char pagemap[256];
+
+    snprintf(mapsall_path, sizeof(mapsall_path), "/proc/%d/maps");
+    snprintf(pagemap, sizeof(pagemap), "/proc/%d/pagemap", pid);
+
+    filePtr = fopen(mapsall_path, "r");
+    if (filePtr == NULL) {
+        perror("Failed to open maps file");
+        return;
+    }
+
+    filePtr2 = fopen(pagemap, "r");
+
+    if (filePtr2 == NULL) {
+        perror("Failed to open pagemap file");
+        fclose(filePtr);
+        return;
+    }
+
+    char line[256];
+
+    while (fgets(line, sizeof(line), filePtr) != NULL) {
+        unsigned long long start, end;
+        sscanf(line, "%llx-%llx", &start, &end);
+
+        uint64_t start_page = start / PAGE_SIZE;
+        uint64_t end_page = end / PAGE_SIZE;
+
+        for (uint64_t page = start_page; page <= end_page; page++) {
+            off_t offset = page * sizeof(uint64_t);
+            uint64_t pagemap_entry;
+
+            if (fseeko(filePtr2, offset, SEEK_SET) != 0) {
+                perror("Failed to seek pagemap file");
+                fclose(filePtr);
+                fclose(filePtr2);
+                return;
+            }
+
+            if (fread(&pagemap_entry, sizeof(uint64_t), 1, filePtr2) != 1) {
+                perror("Failed to read pagemap file");
+                fclose(filePtr);
+                fclose(filePtr2);
+                return;
+            }
+
+            uint64_t frame_number = pagemap_entry & ((1ULL << 55) - 1);
+            print_memory_mapping(page, frame_number);
+        }
+    }
+
+    fclose(filePtr);
+    fclose(filePtr2);
 }
