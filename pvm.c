@@ -86,10 +86,10 @@ void memused(int pid) {
           unsigned long valid = (entry >> 63) & 1;
           if (valid) {
             unsigned long frame_number = entry & ((1UL << 55) - 1);
-            //if (go) {
+            if (go) {
                 //frameinfo(frame_number);
-                //go = 0;
-            //}
+                go = 0;
+            }
             // find the times frame is referenced
             unsigned long offset2 = frame_number * sizeof(unsigned long);
             int kpagecount = open("/proc/kpagecount", O_RDONLY);
