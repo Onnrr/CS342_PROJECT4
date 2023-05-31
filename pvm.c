@@ -270,7 +270,6 @@ void alltablesize(int pid){
             third += (endAddr >> 30) - (startAddr >> 30) + 1;
         }
 
-        printf("start address: %lx, end address: %lx\n", startAddr >> 21, endAddr >> 21);
 
         if(firstIter == 0 && (prevAddress >> 21) == (endAddr >> 21)){
         }
@@ -280,8 +279,6 @@ void alltablesize(int pid){
         else{
             fourth += (endAddr >> 21) - (startAddr >> 21) + 1;
         }
-
-        printf("fourth: %d\n", fourth);
 
         prevAddress = endAddr;
         firstIter = 0;
