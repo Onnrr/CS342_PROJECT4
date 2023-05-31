@@ -9,6 +9,35 @@
 
 void pte(int pid, int VA);
 
+void mapva(int pid, unsigned long VA) {
+    unsigned long page_offset = VA % PAGE_SIZE;
+    unsigned long pagegegeg = VA & 0x0FFFF;
+
+    printf("1: %lu, 2: %lu\n", page_offset, pagegegeg);
+    int pageNumber = VA / PAGE_SIZE;
+
+    char path[256];
+    snprintf(path, sizeof(path), "/proc/%d/pagemap", pid);
+
+    int pagemap = open(path, O_RDONLY);
+
+    unsigned long offset = VA / 4096 * sizeof(unsigned long);
+    lseek(pagemap, offset, SEEK_SET);
+    unsigned long entry;
+    read(pagemap, &entry, sizeof(unsigned long));
+
+    unsigned long valid = (entry >> 63) & 1;
+
+    if (!valid) {
+        printf("Memory is not used\n");
+        return;
+    }
+
+    unsigned long pfn = entry & ((1UL << 55) - 1);
+
+    
+}
+
 void printBinary(unsigned long num) {
     if (num == 0) {
         printf("0");
@@ -87,7 +116,7 @@ void memused(int pid) {
           if (valid) {
             unsigned long frame_number = entry & ((1UL << 55) - 1);
             if (go) {
-                //frameinfo(frame_number);
+                printf("virtual address: %lu\n", i);
                 go = 0;
             }
             // find the times frame is referenced
@@ -116,69 +145,6 @@ void memused(int pid) {
     fclose(file);
 }
 
-int get_frame_number(int pid, int page_number) {
-    // Determine the virtual address corresponding to the page number
-    unsigned long va = (unsigned long)page_number * PAGE_SIZE;
-    
-    // Open the process's memory map file
-    char memmap_filename[256];
-    snprintf(memmap_filename, sizeof(memmap_filename), "/proc/%d/maps", pid);
-    int memmap_fd = open(memmap_filename, O_RDONLY);
-    if (memmap_fd == -1) {
-        perror("Failed to open memory map file");
-        return -1;
-    }
-    
-    // Read the memory map file line by line
-    char line[256];
-    while (fgets(line, sizeof(line), memmap_fd) != NULL) {
-        // Parse the line to extract start and end addresses
-        unsigned long start, end;
-        sscanf(line, "%lx-%lx", &start, &end);
-        
-        // Check if the virtual address falls within the memory region
-        if (va >= start && va < end) {
-            // Determine the offset within the memory region
-            off_t offset = (off_t)(va - start);
-            
-            // Open the process's memory file for reading
-            char mem_filename[256];
-            snprintf(mem_filename, sizeof(mem_filename), "/proc/%d/mem", pid);
-            int mem_fd = open(mem_filename, O_RDONLY);
-            if (mem_fd == -1) {
-                perror("Failed to open memory file");
-                return -1;
-            }
-            
-            // Move to the corresponding offset in the memory file
-            if (lseek(mem_fd, offset, SEEK_SET) == -1) {
-                perror("Failed to seek to offset");
-                close(mem_fd);
-                return -1;
-            }
-            
-            // Read the frame number from the memory file
-            int frame_number;
-            if (read(mem_fd, &frame_number, sizeof(int)) == -1) {
-                perror("Failed to read frame number");
-                close(mem_fd);
-                return -1;
-            }
-            
-            // Close the memory file and memory map file
-            close(mem_fd);
-            close(memmap_fd);
-            
-            return frame_number;
-        }
-    }
-    
-    // Close the memory map file
-    close(memmap_fd);
-    
-    // Page is not in memory
-    return -2;
-}
 
 void frameinfo(unsigned long pfn) {
   int kpageflags = open("/proc/kpageflags", O_RDONLY);
@@ -243,7 +209,8 @@ int main(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i],"-mapva") == 0) {
             int pid = atoi(argv[i + 1]);
-            int VA = atoi(argv[i + 2]);
+            unsigned long VA = atoi(argv[i + 1]);
+            mapva(pid, VA);
         }
         else if (strcmp(argv[i],"-pte") == 0) {
             int pid = atoi(argv[i + 1]);
@@ -251,13 +218,9 @@ int main(int argc, char *argv[]) {
             pte(0, 0);
         }
         else if (strcmp(argv[i],"-maprange") == 0) {
-            int pid = atoi(argv[i + 1]);
-            int va1 = atoi(argv[i + 2]);
-            int va2 = atoi(argv[i + 3]);
-            for(int i = va1; i < va2; i++){
-                int frame_number = get_frame_number(pid, i); // get frame number çalışmıyor olabilir internetten baktım test etcem bi oy atıp geleyim
-                print_mapping(i, frame_number);
-            }
+            //int pid = atoi(argv[i + 1]);
+            //int va1 = atoi(argv[i + 2]);
+            //int va2 = atoi(argv[i + 3]);
         }
         else if (strcmp(argv[i],"-mapall") == 0) {
             int pid = atoi(argv[i + 1]);
@@ -285,9 +248,9 @@ void pte(int pid, int VA) {
         return;
     }
 
-    uint64_t page_table_entry;
-    unsigned long long virtual_addr = 0;
-    unsigned long long num_entries = 10;  // Number of entries to read
+    unsigned long page_table_entry;
+    unsigned long virtual_addr = 0;
+    unsigned long num_entries = 10;  // Number of entries to read
 
     for (unsigned long long i = 0; i < num_entries; i++) {
         // Calculate the offset based on the virtual address
@@ -300,16 +263,16 @@ void pte(int pid, int VA) {
         }
 
         // Read the page table entry
-        if (fread(&page_table_entry, sizeof(uint64_t), 1, pagemap_file) != 1) {
+        if (fread(&page_table_entry, sizeof(unsigned long), 1, pagemap_file) != 1) {
             perror("Failed to read pagemap");
             fclose(pagemap_file);
         }
 
         // Extract the physical page number from the page table entry
-        uint64_t physical_page_num = page_table_entry & ((1ULL << 55) - 1);
-        uint64_t physical_addr = physical_page_num * PAGE_SIZE;
+        unsigned long physical_page_num = page_table_entry & ((1ULL << 55) - 1);
+        unsigned long physical_addr = physical_page_num * PAGE_SIZE;
 
-        printf("Virtual Address: 0x%llx, Physical Address: 0x%llx\n", virtual_addr, physical_addr);
+        printf("Virtual Address: 0x%lu, Physical Address: 0x%lu\n", virtual_addr, physical_addr);
 
         // Increment the virtual address
         virtual_addr += PAGE_SIZE;
