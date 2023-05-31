@@ -106,69 +106,6 @@ void memused(int pid) {
     fclose(file);
 }
 
-// int get_frame_number(int pid, int page_number) {
-//     // Determine the virtual address corresponding to the page number
-//     unsigned long va = (unsigned long)page_number * PAGE_SIZE;
-    
-//     // Open the process's memory map file
-//     char memmap_filename[256];
-//     snprintf(memmap_filename, sizeof(memmap_filename), "/proc/%d/maps", pid);
-//     int memmap_fd = open(memmap_filename, O_RDONLY);
-//     if (memmap_fd == -1) {
-//         perror("Failed to open memory map file");
-//         return -1;
-//     }
-    
-//     // Read the memory map file line by line
-//     char line[256];
-//     while (fgets(line, sizeof(line), memmap_fd) != NULL) {
-//         // Parse the line to extract start and end addresses
-//         unsigned long start, end;
-//         sscanf(line, "%lx-%lx", &start, &end);
-        
-//         // Check if the virtual address falls within the memory region
-//         if (va >= start && va < end) {
-//             // Determine the offset within the memory region
-//             off_t offset = (off_t)(va - start);
-            
-//             // Open the process's memory file for reading
-//             char mem_filename[256];
-//             snprintf(mem_filename, sizeof(mem_filename), "/proc/%d/mem", pid);
-//             int mem_fd = open(mem_filename, O_RDONLY);
-//             if (mem_fd == -1) {
-//                 perror("Failed to open memory file");
-//                 return -1;
-//             }
-            
-//             // Move to the corresponding offset in the memory file
-//             if (lseek(mem_fd, offset, SEEK_SET) == -1) {
-//                 perror("Failed to seek to offset");
-//                 close(mem_fd);
-//                 return -1;
-//             }
-            
-//             // Read the frame number from the memory file
-//             int frame_number;
-//             if (read(mem_fd, &frame_number, sizeof(int)) == -1) {
-//                 perror("Failed to read frame number");
-//                 close(mem_fd);
-//                 return -1;
-//             }
-            
-//             // Close the memory file and memory map file
-//             close(mem_fd);
-//             close(memmap_fd);
-            
-//             return frame_number;
-//         }
-//     }
-    
-//     // Close the memory map file
-//     close(memmap_fd);
-    
-//     // Page is not in memory
-//     return -2;
-// }
 
 void frameinfo(unsigned long pfn) {
   int kpageflags = open("/proc/kpageflags", O_RDONLY);
@@ -374,11 +311,11 @@ void print_mapping(int pid, unsigned long va1, unsigned long va2){
         printf("unused\n");
 }
 
-void print_memory_mapping(uint64_t page_number, uint64_t frame_number){
+void print_memory_mapping(unsigned long page_number, unsigned long frame_number){
     if (frame_number != 0)
-        printf("Page %llu: Frame %llu\n", page_number, frame_number);
+        printf("Page 0x%lx: Frame 0x%lx\n", page_number, frame_number);
     else
-        printf("Page %llu: not-in-memory\n", page_number);
+        printf("Page 0x%lx: not-in-memory\n", page_number);
 }
 
 void mapAll(int pid){
@@ -388,7 +325,7 @@ void mapAll(int pid){
     char mapsall_path[256];
     char pagemap[256];
 
-    snprintf(mapsall_path, sizeof(mapsall_path), "/proc/%d/maps");
+    snprintf(mapsall_path, sizeof(mapsall_path), "/proc/%d/maps", pid);
     snprintf(pagemap, sizeof(pagemap), "/proc/%d/pagemap", pid);
 
     filePtr = fopen(mapsall_path, "r");
@@ -411,12 +348,12 @@ void mapAll(int pid){
         unsigned long long start, end;
         sscanf(line, "%llx-%llx", &start, &end);
 
-        uint64_t start_page = start / PAGE_SIZE;
-        uint64_t end_page = end / PAGE_SIZE;
+        unsigned long start_page = start / PAGE_SIZE;
+        unsigned long end_page = end / PAGE_SIZE;
 
-        for (uint64_t page = start_page; page <= end_page; page++) {
-            off_t offset = page * sizeof(uint64_t);
-            uint64_t pagemap_entry;
+        for (unsigned long page = start_page; page < end_page; page++) {
+            off_t offset = page * sizeof(unsigned long);
+            unsigned long pagemap_entry;
 
             if (fseeko(filePtr2, offset, SEEK_SET) != 0) {
                 perror("Failed to seek pagemap file");
@@ -425,14 +362,14 @@ void mapAll(int pid){
                 return;
             }
 
-            if (fread(&pagemap_entry, sizeof(uint64_t), 1, filePtr2) != 1) {
+            if (fread(&pagemap_entry, sizeof(unsigned long), 1, filePtr2) != 1) {
                 perror("Failed to read pagemap file");
                 fclose(filePtr);
                 fclose(filePtr2);
                 return;
             }
 
-            uint64_t frame_number = pagemap_entry & ((1ULL << 55) - 1);
+            unsigned long frame_number = pagemap_entry & ((1ULL << 55) - 1);
             print_memory_mapping(page, frame_number);
         }
     }
