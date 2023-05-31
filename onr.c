@@ -11,23 +11,20 @@ void pte(int pid, unsigned long VA);
 void printBinary(unsigned long num);
 
 void mapva(int pid, unsigned long VA) {
-    // 36 vpn
-    // 12 offset
     unsigned long page_offset = VA & 0x0FFF;
 
     char path[256];
     sprintf(path, "/proc/%d/pagemap", pid);
-    printf("Path: %s\n", path);
 
     int pagemap = open(path, O_RDONLY);
 
     unsigned long offset = VA / 4096 * sizeof(unsigned long);
+
     lseek(pagemap, offset, SEEK_SET);
     unsigned long entry;
     read(pagemap, &entry, sizeof(unsigned long));
 
     unsigned long valid = (entry >> 63) & 1;
-    printBinary(entry);
 
     if (valid == 0) {
         printf("Memory is not used\n");
@@ -35,9 +32,10 @@ void mapva(int pid, unsigned long VA) {
     }
 
     unsigned long pfn = entry & ((1UL << 55) - 1);
-    pfn = (pfn << 12) & 0x0000FFFFFFFFF000;
-    unsigned long physical_address = pfn & page_offset;
-    printf("Physical memory of %lx", physical_address);
+    pfn = (pfn << 12) & 0xFFFFFFFFFFFFF000;
+    unsigned long physical_address = pfn | page_offset;
+    
+    printf("Physical memory: 0x%016lX\n", physical_address);
     
 }
 
@@ -212,12 +210,12 @@ int main(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i],"-mapva") == 0) {
             int pid = atoi(argv[i + 1]);
-            unsigned long VA = strtol(argv[i + 2], NULL, 16);
+            unsigned long VA = strtol(argv[i + 2], NULL, 10);
             mapva(pid, VA);
         }
         else if (strcmp(argv[i],"-pte") == 0) {
             int pid = atoi(argv[i + 1]);
-            unsigned long VA = strtol(argv[i + 2], NULL, 16);
+            unsigned long VA = strtol(argv[i + 2], NULL, 10);
             pte(pid, VA);
         }
         else if (strcmp(argv[i],"-maprange") == 0) {
@@ -241,60 +239,45 @@ int main(int argc, char *argv[]) {
 }
 
 void pte(int pid, unsigned long VA) {
-    // char path[256];
-    // snprintf(path, sizeof(path), "/proc/%d/pagemap", pid);
+    char path[256];
+    sprintf(path, "/proc/%d/pagemap", pid);
 
-    // int pagemap = open(path, O_RDONLY);
-    // if (pagemap == -1) {
-    //     printf("Failed to open pagemap %s", path);
-    //     return;
-    // }
+    int pagemap = open(path, O_RDONLY);
 
-    // unsigned long page_table_entry;
-    // unsigned long virtual_addr = 0;
-    // unsigned long num_entries = 10;  // Number of entries to read
+    unsigned long page_table_entry;
+    unsigned long virtual_addr = 0;
+    unsigned long num_entries = 10;  // Number of entries to read
 
-    // unsigned long offset = (VA >> 12) * sizeof(unsigned long);
+    unsigned long offset = VA / 4096 * sizeof(unsigned long);
 
-    //     // Seek to the offset in the file
-    //     if (fseek(pagemap_file, offset, SEEK_SET) != 0) {
-    //         perror("Failed to seek pagemap");
-    //         fclose(pagemap_file);
-    //     }
+    // Seek to the offset in the file
+    lseek(pagemap, offset, SEEK_SET);
 
-    //     // Read the page table entry
-    //     if (fread(&page_table_entry, sizeof(unsigned long), 1, pagemap_file) != 1) {
-    //         perror("Failed to read pagemap");
-    //         fclose(pagemap_file);
-    //     }
+    // Read the page table entry
+    read(pagemap, &page_table_entry, sizeof(unsigned long));
 
-    //     // Extract the physical page number from the page table entry
-    //     unsigned long physical_page_num = page_table_entry & ((1ULL << 55) - 1);
-    //     unsigned long physical_addr = physical_page_num * PAGE_SIZE;
+    // Extract the physical page number from the page table entry
+    unsigned long physical_page_num = page_table_entry & ((1ULL << 55) - 1);
 
-    //     printf("Virtual Address: 0x%lu, Physical Address: 0x%lu\n", virtual_addr, physical_addr);
+    int present = (page_table_entry >> 63) & 1;
 
-    //     // Increment the virtual address
-    //     virtual_addr += PAGE_SIZE;
-    // }
+    if (present == 0) {
+        printf("Memory is not used\n");
+        return;
+    }
+    int swapped = (page_table_entry >> 62) & 1;
+    int shared = (page_table_entry >> 61) & 1;
+    int exclusively_mapped = (page_table_entry >> 56) & 1;
+    int soft_dirty = (page_table_entry >> 55) & 1;
+    unsigned long pfn = page_table_entry & ((1ULL << 55) - 1);
 
-    // printf("Entry: ");
-    // printBinary(page_table_entry);
+    printf("Detailed information for the page\n");
+    printf("Physical page number: 0x%lx\n", pfn);
+    printf("Page present: %d\n", present);
+    printf("Page swapped: %d\n", swapped);
+    printf("File page or shared-anon: %d\n", shared);
+    printf("Page exclusively mapped: %d\n", exclusively_mapped);
+    printf("Pte is soft-dirty: %d\n", soft_dirty);
 
-    // int present = (page_table_entry >> 63) & 1;
-    // int swapped = (page_table_entry >> 62) & 1;
-    // int shared = (page_table_entry >> 61) & 1;
-    // int exclusively_mapped = (page_table_entry >> 56) & 1;
-    // int soft_dirty = (page_table_entry >> 55) & 1;
-    // unsigned long pfn = (page_table_entry >> 9) & 0x007FFFFFFFFFFFFF;
-
-    // printf("Detailed information for the page\n");
-    // printf("Physical page number: %lx\n", pfn);
-    // printf("Page present: %d\n", present);
-    // printf("Page swapped: %d\n", swapped);
-    // printf("File page or shared-anon: %d\n", shared);
-    // printf("Page exclusively mapped: %d\n", exclusively_mapped);
-    // printf("Pte is soft-dirty: %d\n", soft_dirty);
-
-    // close(pagemap);
+    close(pagemap);
 }
