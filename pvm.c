@@ -216,7 +216,82 @@ void mapallin(int pid){
 }
 
 void alltablesize(int pid){
-    
+    FILE *file;
+    char line[512];
+
+    // Open the file for reading
+    char filepath[256];
+    sprintf(filepath,"/proc/%d/maps", pid);
+    file = fopen(filepath, "r");
+
+    int firstIter = 1;
+
+    int first = 1;
+    int second = 0, third = 0, fourth = 0;
+    unsigned long prevAddress;
+
+    // Read the file line by line until EOF is reached
+    while (fgets(line, sizeof(line), file) != NULL) {
+        // Process the line here
+        char *token;
+        char *firstPart;
+        char *secondPart;
+
+        token = strtok(line, "-");
+        if (token != NULL) {
+            firstPart = malloc(strlen(token) + 1);  // Allocate memory for the first part
+            strcpy(firstPart, token);               // Copy the first part into the variable
+        }
+
+        token = strtok(NULL, " ");
+        if (token != NULL) {
+            secondPart = malloc(strlen(token) + 1); // Allocate memory for the second part
+            strcpy(secondPart, token);              // Copy the second part into the variable
+        }
+
+        unsigned long startAddr = strtoul(firstPart, NULL, 16);
+        unsigned long endAddr = strtoul(secondPart, NULL, 16);
+
+        if(firstIter == 0 && (prevAddress >> 39) == (endAddr >> 39)){
+        }
+        else if(firstIter == 0 && (prevAddress >> 39) == (startAddr >> 39)){
+            second += (endAddr >> 39) - (startAddr >> 39);
+        }
+        else{
+            second += (endAddr >> 39) - (startAddr >> 39) + 1;
+        }
+
+        if(firstIter == 0 && (prevAddress >> 30) == (endAddr >> 30)){
+        }
+        else if(firstIter == 0 && (prevAddress >> 30) == (startAddr >> 30)){
+            third += (endAddr >> 30) - (startAddr >> 30);
+        }
+        else{
+            third += (endAddr >> 30) - (startAddr >> 30) + 1;
+        }
+
+        printf("start address: %lx, end address: %lx\n", startAddr >> 21, endAddr >> 21);
+
+        if(firstIter == 0 && (prevAddress >> 21) == (endAddr >> 21)){
+        }
+        else if(firstIter == 0 && (prevAddress >> 21) == (startAddr >> 21)){
+            fourth += (endAddr >> 21) - (startAddr >> 21);
+        }
+        else{
+            fourth += (endAddr >> 21) - (startAddr >> 21) + 1;
+        }
+
+        printf("fourth: %d\n", fourth);
+
+        prevAddress = endAddr;
+        firstIter = 0;
+    }
+
+    printf("(pid=%d) total memory occupied by 4-level page table: %d KB (%d frames)\n", pid, (4*(first+second+third+fourth)), (first+second+third+fourth));
+    printf("(pid=%d) number of page tables used: level1=%d, level2=%d, level3=%d, level4=%d\n", pid, first, second, third, fourth);
+
+    // Close the file
+    fclose(file);
 }
 
 int main(int argc, char *argv[]) {
@@ -260,6 +335,7 @@ int main(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i],"-alltablesize") == 0) {
             int pid = atoi(argv[i+1]);
+            alltablesize(pid);
         }
     }
     
